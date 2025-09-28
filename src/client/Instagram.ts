@@ -1,9 +1,8 @@
-import { Browser, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
+import { Browser, Page, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AdblockerPlugin from "puppeteer-extra-plugin-adblocker";
 import UserAgent from "user-agents";
-import { Server } from "proxy-chain";
 import { IGpassword, IGusername } from "../secret";
 import logger from "../config/logger";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
@@ -14,7 +13,6 @@ import { getInstagramCommentSchema } from "../Agent/schema";
 puppeteer.use(StealthPlugin());
 puppeteer.use(
     AdblockerPlugin({
-        // Optionally enable Cooperative Mode for several request interceptors
         interceptResolutionPriority: DEFAULT_INTERCEPT_RESOLUTION_PRIORITY,
     })
 );
@@ -22,180 +20,154 @@ puppeteer.use(
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function runInstagram() {
-    const server = new Server({ port: 8000 });
-    await server.listen();
-    const proxyUrl = `http://localhost:8000`;
     const browser = await puppeteer.launch({
         headless: false,
-        args: [`--proxy-server=${proxyUrl}`],
     });
 
     const page = await browser.newPage();
+    const userAgent = new UserAgent();
+    await page.setUserAgent(userAgent.toString());
+
     const cookiesPath = "./cookies/Instagramcookies.json";
 
-    const checkCookies = await Instagram_cookiesExist();
-    logger.info(`Checking cookies existence: ${checkCookies}`);
+    try {
+        const cookiesExist = await Instagram_cookiesExist();
+        logger.info(`Checking cookies existence: ${cookiesExist}`);
 
-    if (checkCookies) {
-        const cookies = await loadCookies(cookiesPath);
-        await page.setCookie(...cookies);
-        logger.info('Cookies loaded and set on the page.');
+        if (cookiesExist) {
+            const cookies = await loadCookies(cookiesPath);
+            await page.setCookie(...cookies);
+            logger.info('Cookies loaded and set on the page.');
+        }
 
-        // Navigate to Instagram to verify if cookies are valid
         await page.goto("https://www.instagram.com/", { waitUntil: 'networkidle2' });
 
-        // Check if login was successful by verifying page content (e.g., user profile or feed)
         const isLoggedIn = await page.$("a[href='/direct/inbox/']");
-        if (isLoggedIn) {
-            logger.info("Login verified with cookies.");
+        if (!isLoggedIn) {
+            logger.warn("Not logged in. Proceeding with login...");
+            await loginWithCredentials(page);
         } else {
-            logger.warn("Cookies invalid or expired. Logging in again...");
-            await loginWithCredentials(page, browser);
+            logger.info("Already logged in.");
         }
-    } else {
-        // If no cookies are available, perform login with credentials
-        await loginWithCredentials(page, browser);
+
+        const cookies = await page.cookies();
+        await saveCookies(cookiesPath, cookies);
+
+        await page.screenshot({ path: "logged_in.png" });
+
+        await interactWithPosts(page);
+    } catch (error) {
+        logger.error("An error occurred during the Instagram automation process:", error);
+    } finally {
+        await browser.close();
     }
-
-    // Optionally take a screenshot after loading the page
-    await page.screenshot({ path: "logged_in.png" });
-
-    // Navigate to the Instagram homepage
-    await page.goto("https://www.instagram.com/");
-
-    // Interact with the first post
-    await interactWithPosts(page);
-
-    // Close the browser
-    await browser.close();
-    await server.close(true); // Stop the proxy server and close connections
 }
 
-
-const loginWithCredentials = async (page: any, browser: Browser) => {
+const loginWithCredentials = async (page: Page) => {
     try {
-        await page.goto("https://www.instagram.com/accounts/login/");
-        await page.waitForSelector('input[name="username"]');
+        await page.goto("https://www.instagram.com/accounts/login/", { waitUntil: 'networkidle2' });
+        await page.waitForSelector('input[name="username"]', { timeout: 5000 });
 
-        // Fill out the login form
-        await page.type('input[name="username"]', IGusername); // Replace with your username
-        await page.type('input[name="password"]', IGpassword); // Replace with your password
+        await page.type('input[name="username"]', IGusername);
+        await page.type('input[name="password"]', IGpassword);
         await page.click('button[type="submit"]');
 
-        // Wait for navigation after login
-        await page.waitForNavigation();
-
-        // Save cookies after login
-        const cookies = await browser.cookies();
-        // logger.info("Saving cookies after login...",cookies);
-        await saveCookies("./cookies/Instagramcookies.json", cookies);
+        await page.waitForNavigation({ waitUntil: 'networkidle2' });
+        logger.info("Successfully logged in.");
     } catch (error) {
-        // logger.error("Error logging in with credentials:", error);
-        logger.error("Error logging in with credentials:");
+        logger.error("Error logging in with credentials:", error);
+        throw error;
     }
 }
 
-async function interactWithPosts(page: any) {
-    let postIndex = 1; // Start with the first post
-    const maxPosts = 50; // Limit to prevent infinite scrolling
+async function interactWithPosts(page: Page) {
+    let postIndex = 1;
+    const maxPosts = 50;
 
     while (postIndex <= maxPosts) {
         try {
             const postSelector = `article:nth-of-type(${postIndex})`;
+            const postElement = await page.$(postSelector);
 
-            // Check if the post exists
-            if (!(await page.$(postSelector))) {
-                console.log("No more posts found. Exiting loop...");
+            if (!postElement) {
+                logger.info("No more posts found. Exiting loop...");
                 break;
             }
 
-            const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
-            const likeButton = await page.$(likeButtonSelector);
-            const ariaLabel = await likeButton?.evaluate((el: Element) =>
-                el.getAttribute("aria-label")
-            );
+            const likeButtonSelector = 'svg[aria-label="Like"]';
+            const likeButton = await postElement.$(likeButtonSelector);
 
-            if (ariaLabel === "Like") {
-                console.log(`Liking post ${postIndex}...`);
+            if (likeButton) {
+                logger.info(`Liking post ${postIndex}...`);
                 await likeButton.click();
-                await page.keyboard.press("Enter");
-                console.log(`Post ${postIndex} liked.`);
-            } else if (ariaLabel === "Unlike") {
-                console.log(`Post ${postIndex} is already liked.`);
+                logger.info(`Post ${postIndex} liked.`);
             } else {
-                console.log(`Like button not found for post ${postIndex}.`);
+                const unlikeButton = await postElement.$('svg[aria-label="Unlike"]');
+                if (unlikeButton) {
+                    logger.info(`Post ${postIndex} is already liked.`);
+                } else {
+                    logger.warn(`Like button not found for post ${postIndex}.`);
+                }
             }
 
-            // Extract and log the post caption
-            const captionSelector = `${postSelector} div.x9f619 span._ap3a div span._ap3a`;
-            const captionElement = await page.$(captionSelector);
-
+            const captionSelector = 'div[data-testid="post-caption"]';
+            const captionElement = await postElement.$(captionSelector);
             let caption = "";
             if (captionElement) {
                 caption = await captionElement.evaluate((el: HTMLElement) => el.innerText);
-                console.log(`Caption for post ${postIndex}: ${caption}`);
+                logger.info(`Caption for post ${postIndex}: ${caption}`);
             } else {
-                console.log(`No caption found for post ${postIndex}.`);
+                logger.info(`No caption found for post ${postIndex}.`);
             }
 
-            // Check if there is a '...more' link to expand the caption
-            const moreLinkSelector = `${postSelector} div.x9f619 span._ap3a span div span.x1lliihq`;
-            const moreLink = await page.$(moreLinkSelector);
-            if (moreLink) {
-                console.log(`Expanding caption for post ${postIndex}...`);
-                await moreLink.click(); // Click the '...more' link to expand the caption
-                const expandedCaption = await captionElement.evaluate(
-                    (el: HTMLElement) => el.innerText
-                );
-                console.log(
-                    `Expanded Caption for post ${postIndex}: ${expandedCaption}`
-                );
-                caption = expandedCaption; // Update caption with expanded content
-            }
-
-            // Comment on the post
-            const commentBoxSelector = `${postSelector} textarea`;
-            const commentBox = await page.$(commentBoxSelector);
+            const commentBoxSelector = 'textarea[aria-label="Add a comment…"]';
+            const commentBox = await postElement.$(commentBoxSelector);
             if (commentBox) {
-                console.log(`Commenting on post ${postIndex}...`);
-                const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
+                logger.info(`Commenting on post ${postIndex}...`);
+                const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". The reply should be relevant, insightful, and add value to the conversation, reflecting empathy and professionalism. It must be under 300 characters and comply with Instagram's Community Standards on spam.`;
                 const schema = getInstagramCommentSchema();
-                const result = await runAgent(schema, prompt); // Pass the updated caption
+                const result = await runAgent(schema, prompt);
                 const comment = result[0]?.comment;
-                await commentBox.type(comment); // Replace with random comment
 
-                // New selector approach for the post button
-                const postButton = await page.evaluateHandle(() => {
-                    const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-                    return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
-                });
+                if (comment) {
+                    await commentBox.type(comment);
+                    const postButtonSelector = 'div[data-testid="post-comment-input-button"]';
 
-                if (postButton) {
-                    console.log(`Posting comment on post ${postIndex}...`);
-                    await postButton.click();
-                    console.log(`Comment posted on post ${postIndex}.`);
+                    try {
+                        // Wait for the post button to be enabled before clicking
+                        await page.waitForSelector(`${postSelector} ${postButtonSelector}:not([aria-disabled="true"])`, { timeout: 5000 });
+                        const postButton = await postElement.$(postButtonSelector);
+
+                        if (postButton) {
+                            await postButton.click();
+                            logger.info(`Comment posted on post ${postIndex}.`);
+                            await delay(2000); // Wait for the comment to appear
+                        } else {
+                            // This case should ideally not be reached if waitForSelector succeeds
+                            logger.warn(`Post button not found for post ${postIndex} even after waiting.`);
+                        }
+                    } catch (e) {
+                        logger.error(`Post button for post ${postIndex} was not enabled in time or not found.`);
+                    }
+
                 } else {
-                    console.log("Post button not found.");
+                    logger.warn(`Could not generate a comment for post ${postIndex}.`);
                 }
             } else {
-                console.log("Comment box not found.");
+                logger.info("Comment box not found.");
             }
 
-            // Replace the waitForTimeout with our delay function
             const waitTime = Math.floor(Math.random() * 5000) + 5000;
-            console.log(
-                `Waiting ${waitTime / 1000} seconds before moving to the next post...`
-            );
+            logger.info(`Waiting ${waitTime / 1000} seconds before the next post...`);
             await delay(waitTime);
 
-            // Scroll to the next post
             await page.evaluate(() => {
                 window.scrollBy(0, window.innerHeight);
             });
 
-            postIndex++; // Move to the next post
+            postIndex++;
         } catch (error) {
-            console.error(`Error interacting with post ${postIndex}:`, error);
+            logger.error(`Error interacting with post ${postIndex}:`, error);
             break;
         }
     }
