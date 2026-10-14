@@ -1,0 +1,15 @@
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1200px;height:675px;background:#100D0B;overflow:hidden}
+body{font-family:'Inter',sans-serif;color:#F5EFE6;position:relative}
+.grain{position:absolute;inset:0;opacity:.05;background-image:radial-gradient(#F5EFE6 1px,transparent 1px);background-size:4px 4px}
+.glow{position:absolute;right:-120px;top:-90px;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(194,89,59,.30),transparent 66%)}
+.wrap{position:absolute;inset:0;padding:56px 64px;display:flex;flex-direction:column}
+.kicker{color:#C2593B;font-size:15px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.kicker:before{content:"";width:9px;height:9px;border-radius:50%;background:#C2593B}
+h1{font-family:'Inter Display','Inter';font-weight:800;letter-spacing:-.035em;line-height:1.02;margin-top:20px}
+h1 em{font-style:normal;color:#C2593B}
+.sub{font-size:21px;color:#B5A794;margin-top:16px;line-height:1.35}
+.sub b{color:#F5EFE6}
+.foot{margin-top:auto;display:flex;align-items:center;gap:14px;color:#A2947F;font-size:16px}
+.foot:before{content:"";width:34px;height:4px;background:#C2593B;border-radius:2px}
+.foot b{color:#F5EFE6}
