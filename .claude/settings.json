@@ -1,16 +1,31 @@
 {
   "permissions": {
     "allow": [
-      "mcp__Notion",
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
       "WebSearch",
       "WebFetch",
+      "Agent",
+      "Skill",
+      "SendMessage",
+      "mcp__Notion",
       "mcp__Calendly",
-      "mcp__Metricool_Social_Media_Management__getAnalyticsAvailableMetrics",
-      "mcp__Metricool_Social_Media_Management__getAnalyticsDataByMetrics",
-      "mcp__Metricool_Social_Media_Management__getBestTimeToPostByNetwork",
-      "mcp__Metricool_Social_Media_Management__getBrandSettings",
-      "mcp__Metricool_Social_Media_Management__getScheduledPosts",
-      "mcp__Supermetrics_Marketing_Analytics"
+      "mcp__Metricool_Social_Media_Management",
+      "mcp__Supermetrics_Marketing_Analytics",
+      "mcp__Google_Drive",
+      "mcp__Canva",
+      "mcp__Heygen",
+      "mcp__MCP_Higgsfield",
+      "mcp__Magnific",
+      "mcp__ElevenLabs",
+      "mcp__vidIQ",
+      "mcp__Transcribe_Videos_Instagram",
+      "mcp__claude-code-remote",
+      "mcp__github"
     ]
   }
 }
