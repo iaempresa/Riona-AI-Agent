@@ -11,15 +11,6 @@
       "mcp__Metricool_Social_Media_Management__getBrandSettings",
       "mcp__Metricool_Social_Media_Management__getScheduledPosts",
       "mcp__Supermetrics_Marketing_Analytics"
-    ],
-    "ask": [
-      "mcp__Notion__notion-delete-pages",
-      "mcp__Notion__notion-delete-databases",
-      "mcp__Notion__notion-move-pages",
-      "mcp__Calendly__meetings-cancel_event",
-      "mcp__Calendly__meetings-create_invitee",
-      "mcp__Calendly__organizations-create_organization_invitation",
-      "mcp__Calendly__organizations-revoke_organization_invitation"
     ]
   }
 }
